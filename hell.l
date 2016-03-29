@@ -7,7 +7,9 @@
 
 D			[0-9]
 DS			{D}+
+L			[a-zA-Z_]
 H			[a-fA-F0-9]+h
+STR			"L"
 
 %%
 
@@ -19,6 +21,10 @@ H			[a-fA-F0-9]+h
 "displayhex"          { return(DISPLAYHEX); }
 
 {DS}		{ yylval = atoi(yytext); return INT;}
+
+{L}		{ yylval = strdup(yytext); return IDENTIFIER; }
+
+{STR}		{ yylval = strdup(yytext); return STRING; }
 
 {H}		{ int sizeo = strlen(yytext);
 		    sizeo--;
