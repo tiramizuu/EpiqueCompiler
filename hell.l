@@ -51,7 +51,7 @@ H			[a-fA-F0-9]+h
 "%"			{ return(MOD); }
 "<"			{ return(LINEEND); }
 "="			{ return(EQ_OP); }
-[\"]			{ return(QUOTE); }
+"\""			{ return(QUOTE); }
 ":"         { return(ASSIGN);}
 
 
