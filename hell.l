@@ -16,11 +16,12 @@ STR			"L"
 "fixed"			{ return(FIXED); }
 "check"         { return(CHECK); }
 "spin"          { return(SPIN); }
+"to"          { return(TO); }
 "display"          { return(DISPLAY); }
 "displaymessage"          { return(DISPLAYMS); }
 "displayhex"          { return(DISPLAYHEX); }
 
-{DS}		{ yylval = atoi(yytext); return INT;}
+{DS}		{ yylval = atoi(yytext); return INT; }
 
 {L}		{ yylval = strdup(yytext); return IDENTIFIER; }
 
@@ -44,6 +45,8 @@ STR			"L"
 
 "("			{ return(PAR_OPEN); }
 ")"			{ return(PAR_CLOSE); }
+"{"			{ return(PEAGGA_OPEN); }
+"}"			{ return(PEAGGA_CLOSE); }
 "-"			{ return(MINUS); }
 "+"			{ return(PLUS); }
 "*"			{ return(MULTIPLY); }
