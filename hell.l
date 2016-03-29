@@ -9,7 +9,6 @@ D			[0-9]
 DS			{D}+
 L			[a-zA-Z_]
 H			[a-fA-F0-9]+h
-STR			"L"
 
 %%
 
@@ -21,11 +20,9 @@ STR			"L"
 "displaymessage"          { return(DISPLAYMS); }
 "displayhex"          { return(DISPLAYHEX); }
 
-{DS}		{ yylval = atoi(yytext); return INT; }
+{DS}		{ yylval.num = atoi(yytext); return INT; }
 
-{L}		{ yylval = strdup(yytext); return IDENTIFIER; }
-
-{STR}		{ yylval = strdup(yytext); return STRING; }
+{L}		{ yylval.str = strdup(yytext); return IDENTIFIER; }
 
 {H}		{ int sizeo = strlen(yytext);
 		    sizeo--;
@@ -40,7 +37,7 @@ STR			"L"
 			++i;
 		    }
 
-		yylval = dec;
+		yylval.num = dec;
 		return(INT); }
 
 "("			{ return(PAR_OPEN); }
@@ -54,6 +51,7 @@ STR			"L"
 "%"			{ return(MOD); }
 "<"			{ return(LINEEND); }
 "="			{ return(EQ_OP); }
+[\"]			{ return(QUOTE); }
 ":"         { return(ASSIGN);}
 
 
