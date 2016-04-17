@@ -23,7 +23,7 @@ H			[a-fA-F0-9]+h
 {DS}		{ yylval.num = atoi(yytext); return INT; }
 
 L?\"(\\.|[^\\"])*\"		{ yylval.str = strdup(yytext); return STRING_LITERAL; }
-{L}		{ yylval.str = strdup(yytext); return IDENTIFIER; }
+{L}({L}|{D})*		{ yylval.str = strdup(yytext); return IDENTIFIER; }
 
 {H}		{ int sizeo = strlen(yytext);
 		    sizeo--;

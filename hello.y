@@ -41,7 +41,7 @@ Input:
 Line:
      CRLF
 	| Expression LINEEND CRLF
-	| Error CRLF {printf("! ERROR\n");}
+	| Error CRLF
 ;
 
 Expression:
@@ -89,8 +89,8 @@ Num:
 ;
 
 Error:
-	ERROR {}
-	| Error ERROR {}
+	ERROR {printf("! Fuckin ERROR\n");}
+	| Error ERROR {printf("! Fuckin ERROR\n");}
 
 %%
 
@@ -107,13 +107,20 @@ int findIdIndex(char* id)
 	int i;
 	for(i = 0 ; i < topStack ; i++)
 	{
-		if(strcmp(id,iden[i])) return i;
+		if(!strcmp(id,iden[i])) return i;
 	}
 	return -1;
 }
 printStr(char* s)
 {
 	while(*(++s) != '\"')
-	printf("%c",*s);
+		if(*s != '\\') printf("%c",*s);
+		else switch(*(++s))
+		{
+			case('\\') : printf("\\"); break;
+			case('n') : printf("\n"); break;
+			case('t') : printf("\t"); break;
+			case('r') : printf("\r"); break;
+		}
 }
 
