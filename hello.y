@@ -16,14 +16,14 @@ int topStack = 0;
 %}
 %union {
         int64_t num;
-        char *str;
+        char* str;
 }
-%type <num> Numeric
+%type <num> Num
 %token <num> INT
 %token PLUS MINUS MULTIPLY DIVIDE MOD
 %token PAR_OPEN PAR_CLOSE PEAGGA_OPEN PEAGGA_CLOSE
 %token DISPLAY DISPLAYMS DISPLAYHEX QUOTE
-%token <str> IDENTIFIER
+%token <str> IDENTIFIER STRING_LITERAL
 %token ERROR CRLF FIXED
 %token LINEEND
 %token EQ_OP ASSIGN CHECK SPIN TO
@@ -45,17 +45,23 @@ Line:
 ;
 
 Expression:
-     Numeric 
-	//| DISPLAYMS QUOTE IDENTIFIER QUOTE { printf("%s",$3); }
-	| DISPLAY Numeric { printf("%d",$2); }
-	| DISPLAYHEX Numeric { printf("0x%x",$2); }
-    	| FIXED IDENTIFIER ASSIGN Numeric { if(findIdIndex($2) == -1){
+     Num 
+	| DISPLAYMS STRING_LITERAL { char* s = $2; 
+					if(*s == '\"') {
+						while(*(++s) != '\0'); 
+						if(*(s-1) == '\"') printStr($2);
+						else yyerror(s);
+					}
+					else yyerror(s); }
+	| DISPLAY Num { printf("%d",$2); }
+	| DISPLAYHEX Num { printf("0x%x",$2); }
+    	| FIXED IDENTIFIER ASSIGN Num { if(findIdIndex($2) == -1){
 								r[topStack] = $4; 
 								isFixed[topStack] = 1; 
 								iden[topStack++] = $2;
 							}
 					else printf("! ERROR : can't assign to fixed value poi~\n"); }
-    	| IDENTIFIER ASSIGN Numeric { int index = findIdIndex($1);
+    	| IDENTIFIER ASSIGN Num { int index = findIdIndex($1);
 					if(index == -1) {
 						r[topStack] = $3; 
 						isFixed[topStack] = 0; 
@@ -65,20 +71,20 @@ Expression:
 						r[index] = $3;
 					}
 					else printf("! ERROR : can't assign to fixed value poi~\n"); }
-	//| CHECK PAR_OPEN Numeric EQ_OP Numeric PAR_CLOSE Expression { if($3 == $5) $$ = $7; }
+	//| CHECK PAR_OPEN Num EQ_OP Num PAR_CLOSE Expression { if($3 == $5) $$ = $7; }
 	| PEAGGA_OPEN Expression PEAGGA_CLOSE
-	//| SPIN PAR_OPEN Numeric TO Numeric PAR_CLOSE Expression { int i; for(i = $3 ; i < $5 ; i++) $$ = $7; }
+	//| SPIN PAR_OPEN Num TO Num PAR_CLOSE Expression { int i; for(i = $3 ; i < $5 ; i++) $$ = $7; }
 ;
 
-Numeric:
+Num:
     INT { $$ = $1; }
 	| MINUS INT { $$ = - $2; }
-	| Numeric MULTIPLY Numeric { $$ = $1 * $3; }
-	| Numeric DIVIDE Numeric { $$ = $1 / $3; }
-	| Numeric MOD Numeric { $$ = $1 % $3; }
-	| Numeric PLUS Numeric { $$ = $1 + $3; }
-	| Numeric MINUS Numeric { $$ = $1 - $3; }
-    	| PAR_OPEN Numeric PAR_CLOSE { $$ = $2; }
+	| Num MULTIPLY Num { $$ = $1 * $3; }
+	| Num DIVIDE Num { $$ = $1 / $3; }
+	| Num MOD Num { $$ = $1 % $3; }
+	| Num PLUS Num { $$ = $1 + $3; }
+	| Num MINUS Num { $$ = $1 - $3; }
+    	| PAR_OPEN Num PAR_CLOSE { $$ = $2; }
 	| IDENTIFIER { int s = findIdIndex($1); $$ = (s  != -1) ? r[s] : 0; }
 ;
 
@@ -104,5 +110,10 @@ int findIdIndex(char* id)
 		if(strcmp(id,iden[i])) return i;
 	}
 	return -1;
+}
+printStr(char* s)
+{
+	while(*(++s) != '\"')
+	printf("%c",*s);
 }
 
