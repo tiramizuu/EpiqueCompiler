@@ -12,6 +12,7 @@ int64_t r[26] = {0};
 char* iden[26] = {0};
 int isFixed[26] = {0};
 int topStack = 0;
+int lastCmp = 1;
 
 %}
 %union {
@@ -46,22 +47,29 @@ Line:
 
 Expression:
      Num 
-	| DISPLAYMS STRING_LITERAL { char* s = $2; 
-					if(*s == '\"') {
-						while(*(++s) != '\0'); 
-						if(*(s-1) == '\"') printStr($2);
-						else yyerror(s);
+	| DISPLAYMS STRING_LITERAL { if(lastCmp == 0) lastCmp = 1;
+					else { char* s = $2; 
+						if(*s == '\"') {
+							while(*(++s) != '\0'); 
+							if(*(s-1) == '\"') printStr($2);
+							else yyerror(s);
+						}
+						else yyerror(s); 
+						} 
 					}
-					else yyerror(s); }
-	| DISPLAY Num { printf("%d",$2); }
-	| DISPLAYHEX Num { printf("0x%x",$2); }
-    	| FIXED IDENTIFIER ASSIGN Num { if(findIdIndex($2) == -1){
+	| DISPLAY Num { if(lastCmp == 0) lastCmp = 1;
+			else printf("%d",$2); }
+	| DISPLAYHEX Num { if(lastCmp == 0) lastCmp = 1;
+			else  printf("0x%x",$2); }
+    	| FIXED IDENTIFIER ASSIGN Num { if(lastCmp == 0) lastCmp = 1;
+					else { if(findIdIndex($2) == -1){
 								r[topStack] = $4; 
 								isFixed[topStack] = 1; 
 								iden[topStack++] = $2;
 							}
-					else printf("! ERROR : can't assign to fixed value poi~\n"); }
-    	| IDENTIFIER ASSIGN Num { int index = findIdIndex($1);
+					else printf("! ERROR : can't assign to fixed value poi~\n"); } }
+    	| IDENTIFIER ASSIGN Num { if(lastCmp == 0) lastCmp = 1;
+					else { int index = findIdIndex($1);
 					if(index == -1) {
 						r[topStack] = $3; 
 						isFixed[topStack] = 0; 
@@ -70,12 +78,15 @@ Expression:
 					else if(isFixed[index] == 0 ) {
 						r[index] = $3;
 					}
-					else printf("! ERROR : can't assign to fixed value poi~\n"); }
-	//| CHECK PAR_OPEN Num EQ_OP Num PAR_CLOSE Expression { if($3 == $5) $$ = $7; }
+					else printf("! ERROR : can't assign to fixed value poi~\n"); } }
+	| CHECK Comparing Expression 
 	| PEAGGA_OPEN Expression PEAGGA_CLOSE
 	//| SPIN PAR_OPEN Num TO Num PAR_CLOSE Expression { int i; for(i = $3 ; i < $5 ; i++) $$ = $7; }
 ;
 
+Comparing :
+	PAR_OPEN Num EQ_OP Num PAR_CLOSE { if($2 != $4) lastCmp = 0; }
+;
 Num:
     INT { $$ = $1; }
 	| MINUS INT { $$ = - $2; }
