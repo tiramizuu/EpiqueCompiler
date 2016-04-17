@@ -13,6 +13,7 @@ char* iden[26] = {0};
 int isFixed[26] = {0};
 int topStack = 0;
 int lastCmp = 1;
+int loopLeft = 0;
 
 %}
 %union {
@@ -48,7 +49,7 @@ Line:
 Expression:
      Num 
 	| DISPLAYMS STRING_LITERAL { if(lastCmp == 0) lastCmp = 1;
-					else { char* s = $2; 
+					else if(loopLeft == 0) { char* s = $2; 
 						if(*s == '\"') {
 							while(*(++s) != '\0'); 
 							if(*(s-1) == '\"') printStr($2);
@@ -56,20 +57,36 @@ Expression:
 						}
 						else yyerror(s); 
 						} 
-					}
+					else while((loopLeft--) != 0) { char* s = $2; 
+						if(*s == '\"') {
+							while(*(++s) != '\0'); 
+							if(*(s-1) == '\"') printStr($2);
+							else yyerror(s);
+						}
+						else yyerror(s); 
+						} 
+				}
 	| DISPLAY Num { if(lastCmp == 0) lastCmp = 1;
-			else printf("%d",$2); }
+			else if(loopLeft == 0) printf("%d",$2);
+			else while((loopLeft--) != 0) printf("%d",$2); }
 	| DISPLAYHEX Num { if(lastCmp == 0) lastCmp = 1;
-			else  printf("0x%x",$2); }
+			else if(loopLeft == 0) printf("0x%x",$2);
+			else while((loopLeft--) != 0) printf("0x%x",$2); }
     	| FIXED IDENTIFIER ASSIGN Num { if(lastCmp == 0) lastCmp = 1;
-					else { if(findIdIndex($2) == -1){
+					else if(loopLeft == 0) { if(findIdIndex($2) == -1){
 								r[topStack] = $4; 
 								isFixed[topStack] = 1; 
 								iden[topStack++] = $2;
 							}
-					else printf("! ERROR : can't assign to fixed value poi~\n"); } }
+					else { printf("! ERROR : can't assign to fixed value poi~\n"); exit(0); } } 
+					else while((loopLeft--) != 0) { if(findIdIndex($2) == -1){
+								r[topStack] = $4; 
+								isFixed[topStack] = 1; 
+								iden[topStack++] = $2;
+							}
+					else { printf("! ERROR : can't assign to fixed value poi~\n"); exit(0); } } }
     	| IDENTIFIER ASSIGN Num { if(lastCmp == 0) lastCmp = 1;
-					else { int index = findIdIndex($1);
+					else if(loopLeft == 0) { int index = findIdIndex($1);
 					if(index == -1) {
 						r[topStack] = $3; 
 						isFixed[topStack] = 0; 
@@ -78,15 +95,30 @@ Expression:
 					else if(isFixed[index] == 0 ) {
 						r[index] = $3;
 					}
-					else printf("! ERROR : can't assign to fixed value poi~\n"); } }
+					else { printf("! ERROR : can't assign to fixed value poi~\n"); exit(0); } } 
+					else while((loopLeft--) != 0) { int index = findIdIndex($1);
+					if(index == -1) {
+						r[topStack] = $3; 
+						isFixed[topStack] = 0; 
+						iden[topStack++] = $1;
+					}
+					else if(isFixed[index] == 0 ) {
+						r[index] = $3;
+					}
+					else { printf("! ERROR : can't assign to fixed value poi~\n"); exit(0); } } }
 	| CHECK Comparing Expression 
 	| PEAGGA_OPEN Expression PEAGGA_CLOSE
-	//| SPIN PAR_OPEN Num TO Num PAR_CLOSE Expression { int i; for(i = $3 ; i < $5 ; i++) $$ = $7; }
+	| SPIN Iterating Expression
 ;
 
 Comparing :
 	PAR_OPEN Num EQ_OP Num PAR_CLOSE { if($2 != $4) lastCmp = 0; }
 ;
+
+Iterating :
+	PAR_OPEN Num TO Num PAR_CLOSE { loopLeft = $4 - $2; }
+;
+
 Num:
     INT { $$ = $1; }
 	| MINUS INT { $$ = - $2; }
@@ -100,8 +132,8 @@ Num:
 ;
 
 Error:
-	ERROR {printf("! Fuckin ERROR\n");}
-	| Error ERROR {printf("! Fuckin ERROR\n");}
+	ERROR {printf("! ERROR\n");}
+	| Error ERROR {printf("! ERROR\n");}
 
 %%
 
