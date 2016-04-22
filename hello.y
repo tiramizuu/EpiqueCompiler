@@ -14,7 +14,8 @@ int isFixed[26] = {0};
 int topStack = 0;
 int isData = 1;
 int topreg = 0;
-//FILE* f = fopen("temp.s","w");
+int toplabel = 0, incheck = 0,inloop = 0;
+FILE* f;
 
 %}
 %union {
@@ -55,26 +56,33 @@ Expression:
 							while(*(++s) != '\0'); 
 							if(*(s-1) == '\"') printStr($2);
 							else yyerror(s);
+							if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; }
+							if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; }
 						}
 						else yyerror(s); 
 						} 
-	| DISPLAY Num { printf("%d",$2); }
-	| DISPLAYHEX Num { printf("0x%x",$2); }
+	| DISPLAY Num { fprintf(f,"\tli\t$v0,1\n\tmove\t$a0,$r%d\n\tsyscall\n",topreg-1); if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; } 
+						if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; } }
+	| DISPLAYHEX Num { fprintf(f,"0x%x",$2); if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; }
+						if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; } }
     	| FIXED Identifying ASSIGN Num {
 						r[topStack] = $4; 
 						isFixed[topStack] = 1; 
 						iden[topStack++] = $2;
+						fprintf(f,"\t%s:\t.word\t%d\n",iden[topStack++],$4);
 					}
     	| Identifying ASSIGN Num { int index = findIdIndex($1);
 					if(index == -1) {
 						r[topStack] = $3; 
 						isFixed[topStack] = 0; 
 						iden[topStack] = $1;
-						printf("\t%s:\t.word\t%d\n",iden[topStack++],$3);
+						fprintf(f,"\t%s:\t.word\t%d\n",iden[topStack++],$3);
 					}
 					else {
 						r[index] = $3;
-						printf("\tsw\t$t%d,%s\n",topreg-1,iden[index]);
+						fprintf(f,"\tsw\t$t%d,%s\n",topreg-1,iden[index]);
+						if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; }
+						if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; }
 						topreg = 0;
 					} } 
 	| CHECK Comparing Expression 
@@ -83,11 +91,11 @@ Expression:
 ;
 
 Comparing :
-	PAR_OPEN Num EQ_OP Num PAR_CLOSE { if($2 != $4) ; }
+	PAR_OPEN Num EQ_OP Num PAR_CLOSE { fprintf(f,"\tbne\t$t%d,$t%d,L%d\n",topreg-2,topreg-1,toplabel); incheck = 1; }
 ;
 
 Iterating :
-	PAR_OPEN Num TO Num PAR_CLOSE 
+	PAR_OPEN Num TO Num PAR_CLOSE { fprintf(f,"L%d:\tbeq\t$t%d,$t%d,L%d\n",toplabel,topreg-2,topreg-1,toplabel+1); inloop = 1; }
 ;
 Identifying :
 	IDENTIFIER { int index = findIdIndex($1);
@@ -95,42 +103,43 @@ Identifying :
 						if(isFixed[index] == 0 ) {
 							printText();
 						}
-						else { printf("! ERROR : can't assign to fixed value poi~\n"); exit(0); 
+						else { fprintf(f,"! ERROR : can't assign to fixed value poi~\n"); exit(0); 
 						}
 					} $$ = $1; } 
 ;
 
 Num:
-    INT { if(!isData) printf("\tli\t$t%d,%d\n",topreg++,$1); $$ = $1; }
-	| MINUS INT { if(!isData) printf("\tli\t$t%d,%d\n",topreg++, - $2); $$ = - $2; }
-	| Num MULTIPLY Num { if(!isData) printf("\tmult\t$t%d,$t%d\n\tmfhi\t$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 * $3; topreg--; }
-	| Num DIVIDE Num { if(!isData) printf("\tdiv\t$t%d,$t%d\n\tmflo\t$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 / $3; topreg--; }
+    INT { if(!isData) fprintf(f,"\tli\t$t%d,%d\n",topreg++,$1); $$ = $1; }
+	| MINUS INT { if(!isData) fprintf(f,"\tli\t$t%d,%d\n",topreg++, - $2); $$ = - $2; }
+	| Num MULTIPLY Num { if(!isData) fprintf(f,"\tmult\t$t%d,$t%d\n\tmfhi\t$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 * $3; topreg--; }
+	| Num DIVIDE Num { if(!isData) fprintf(f,"\tdiv\t$t%d,$t%d\n\tmflo\t$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 / $3; topreg--; }
 	| Num MOD Num { $$ = $1 % $3; }
-	| Num PLUS Num { if(!isData) printf("\tadd\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 + $3; topreg--; }
-	| Num MINUS Num { if(!isData) printf("\tsub\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 - $3; topreg--; }
+	| Num PLUS Num { if(!isData) fprintf(f,"\tadd\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 + $3; topreg--; }
+	| Num MINUS Num { if(!isData) fprintf(f,"\tsub\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 - $3; topreg--; }
     	| PAR_OPEN Num PAR_CLOSE { $$ = $2; }
-	| IDENTIFIER { int s = findIdIndex($1); $$ = (s  != -1) ? r[s] : 0; if(!isData) printf("\tlw\t$t%d,%s\n",topreg++,iden[s]); }
+	| IDENTIFIER { int s = findIdIndex($1); $$ = (s  != -1) ? r[s] : 0; if(!isData) fprintf(f,"\tlw\t$t%d,%s\n",topreg++,iden[s]); }
 ;
 
 Error:
-	ERROR {printf("! ERROR\n");}
-	| Error ERROR {printf("! ERROR\n");}
+	ERROR {fprintf(f,"! ERROR\n");}
+	| Error ERROR {fprintf(f,"! ERROR\n");}
 
 %%
 
 int yyerror(char *s) {
-    printf("! ERROR\n");
+    fprintf(f,"! ERROR\n");
 }
 
 int main() {
-	printf(".data");
+	f = fopen("temp.s","w");
+	fprintf(f,".data");
 	yyparse();
 }
 printText()
 {
 	if(isData) {
 		isData = 0;
-		printf(".text");
+		fprintf(f,".text\nmain:");
 	}
 }
 int findIdIndex(char* id)
@@ -145,13 +154,13 @@ int findIdIndex(char* id)
 printStr(char* s)
 {
 	while(*(++s) != '\"')
-		if(*s != '\\') printf("%c",*s);
+		if(*s != '\\') fprintf(f,"%c",*s);
 		else switch(*(++s))
 		{
-			case('\\') : printf("\\"); break;
-			case('n') : printf("\n"); break;
-			case('t') : printf("\t"); break;
-			case('r') : printf("\r"); break;
+			case('\\') : fprintf(f,"\\"); break;
+			case('n') : fprintf(f,"\n"); break;
+			case('t') : fprintf(f,"\t"); break;
+			case('r') : fprintf(f,"\r"); break;
 		}
 }
 
