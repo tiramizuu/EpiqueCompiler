@@ -12,15 +12,24 @@ int r[26] = {0};
 char* iden[26] = {0};
 int isFixed[26] = {0};
 int topStack = 0;
-int isData = 1;
-int topreg = 0;
+int isData = 1, isDataOnWrite = 1, loopreg;
+int topreg = 0,topstring = 0;
 int toplabel = 0, incheck = 0,inloop = 0;
 FILE* f;
+typedef struct node{
+	char* data;
+	struct node* next;
+}node;
+node* h;
+node* tdata;
+node* ttext;
+char* replaceStr(char* s);
+char* replaceStr2(char* s);
 
 %}
 %union {
         int num;
-        char* str;
+        char *str;
 }
 %type <num> Num
 %type <str> Identifying
@@ -51,38 +60,69 @@ Line:
 
 Expression:
      Num 
-	| DISPLAYMS STRING_LITERAL { char* s = $2; 
+	| DISPLAYMS STRING_LITERAL { char *s = $2; 
 						if(*s == '\"') {
 							while(*(++s) != '\0'); 
-							if(*(s-1) == '\"') printStr($2);
-							else yyerror(s);
-							if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; }
-							if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; }
+							if(*(s-1) == '\"') {
+								//char* stringg;
+								//stringg = replaceStr2($2);
+								char *printdata = (char*)calloc(40,sizeof(char)); 
+								sprintf(printdata,"\tString%d\t.asciiz\t%s\n",topstring++,$2);
+								appendData(printdata);
+								char *printcode = (char*)calloc(40,sizeof(char)); 
+								sprintf(printcode,"\tli\t$v0,4\n\tla\t$a0,String%d\n\tsyscall\n",topstring-1); 
+								appendText(printcode);
+							}
+							else yyerror("expected \" at the end of string");
+							if(incheck) { char *t = (char*)calloc(20,sizeof(char)); 
+									sprintf(t,"L%d:",toplabel++); appendText(t); incheck = 0; }
+							if(inloop) { char *t = (char*)calloc(40,sizeof(char)); 
+									sprintf(t,"\tli\t$t%d,1\n\tadd\t$t%d,$t%d,$t%d\n\tj\tL%d\nL%d:",topreg-1,loopreg,topreg-1,loopreg,toplabel,toplabel+1); appendText(t); inloop = 0; toplabel++; }
 						}
-						else yyerror(s); 
+						else yyerror("expected \" at the begin of string"); 
 						} 
-	| DISPLAY Num { fprintf(f,"\tli\t$v0,1\n\tmove\t$a0,$r%d\n\tsyscall\n",topreg-1); if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; } 
-						if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; } }
-	| DISPLAYHEX Num { fprintf(f,"0x%x",$2); if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; }
-						if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; } }
+	| DISPLAY Num { if(isData) {
+				isData = 0;
+				char *s = (char*)calloc(20,sizeof(char)); sprintf(s,"\tli\t$t%d,%d\n",topreg++,$2); appendText(s);
+			}
+			char *s = (char*)calloc(40,sizeof(char)); 
+			sprintf(s,"\tli\t$v0,1\n\tmove\t$a0,$t%d\n\tsyscall\n",topreg-1); appendText(s); 
+			if(incheck) { char *t = (char*)calloc(20,sizeof(char)); ; sprintf(t,"L%d:",toplabel++); appendText(t); incheck = 0; } 
+			if(inloop) { char *t = (char*)calloc(40,sizeof(char)); ; 
+					sprintf(t,"\tli\t$t%d,1\n\tadd\t$t%d,$t%d,$t%d\n\tj\tL%d\nL%d:",topreg-1,loopreg,topreg-1,loopreg,toplabel,toplabel+1); appendText(t); inloop = 0; toplabel++; } }
+	| DISPLAYHEX Num { char *s = (char*)calloc(15,sizeof(char));  
+				sprintf(s,"\tString%d\t.asciiz\t\"0x%x\"",topstring++,$2); appendData(s);
+				char *printcode = (char*)calloc(40,sizeof(char)); 
+				sprintf(printcode,"\tli\t$v0,4\n\tla\t$a0,String%d\n\tsyscall\n",topstring-1); 
+				appendText(printcode); 
+						if(incheck) { char *t = (char*)calloc(20,sizeof(char)); 
+								sprintf(t,"L%d:",toplabel++); appendText(t); incheck = 0; }
+						if(inloop) { char *t = (char*)calloc(40,sizeof(char)); 
+								sprintf(t,"\tli\t$t%d,1\n\tadd\t$t%d,$t%d,$t%d\n\tj\tL%d\nL%d:",topreg-1,loopreg,topreg-1,loopreg,toplabel,toplabel+1); appendText(t); inloop = 0; toplabel++; } }
     	| FIXED Identifying ASSIGN Num {
 						r[topStack] = $4; 
 						isFixed[topStack] = 1; 
 						iden[topStack++] = $2;
-						fprintf(f,"\t%s:\t.word\t%d\n",iden[topStack++],$4);
+						char *s = (char*)calloc(30,sizeof(char)); 
+						sprintf(s,"\t%s:\t.word\t%d\n",iden[topStack++],$4); appendData(s);
 					}
     	| Identifying ASSIGN Num { int index = findIdIndex($1);
 					if(index == -1) {
 						r[topStack] = $3; 
 						isFixed[topStack] = 0; 
 						iden[topStack] = $1;
-						fprintf(f,"\t%s:\t.word\t%d\n",iden[topStack++],$3);
+						char *s = (char*)calloc(30,sizeof(char)); 
+						sprintf(s,"\t%s:\t.word\t%d\n",iden[topStack++],$3); appendData(s);
+						if(incheck || inloop) yyerror("can't assign to fixed variable more than once.");
 					}
 					else {
 						r[index] = $3;
-						fprintf(f,"\tsw\t$t%d,%s\n",topreg-1,iden[index]);
-						if(incheck) { fprintf(f,"L%d:",toplabel++); incheck = 0; }
-						if(inloop) { fprintf(f,"\tj\tL%d\nL%d:",toplabel,toplabel+1); inloop = 0; toplabel++; }
+						char *s = (char*)calloc(20,sizeof(char)); 
+						sprintf(s,"\tsw\t$t%d,%s\n",topreg-1,iden[index]); appendText(s);
+						if(incheck) { char *t = (char*)calloc(20,sizeof(char)); 
+							sprintf(t,"L%d:",toplabel++); incheck = 0; appendText(t); }
+						if(inloop) { char *t = (char*)calloc(40,sizeof(char)); 
+							sprintf(t,"\tli\t$t%d,1\n\tadd\t$t%d,$t%d,$t%d\n\tj\tL%d\nL%d:",topreg-1,loopreg,topreg-1,loopreg,toplabel,toplabel+1); inloop = 0; toplabel++; appendText(t); }
 						topreg = 0;
 					} } 
 	| CHECK Comparing Expression 
@@ -91,56 +131,81 @@ Expression:
 ;
 
 Comparing :
-	PAR_OPEN Num EQ_OP Num PAR_CLOSE { fprintf(f,"\tbne\t$t%d,$t%d,L%d\n",topreg-2,topreg-1,toplabel); incheck = 1; }
+	PAR_OPEN Num EQ_OP Num PAR_CLOSE { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tbne\t$t%d,$t%d,L%d\n",topreg-2,topreg-1,toplabel); appendText(s); incheck = 1; }
 ;
 
 Iterating :
-	PAR_OPEN Num TO Num PAR_CLOSE { fprintf(f,"L%d:\tbeq\t$t%d,$t%d,L%d\n",toplabel,topreg-2,topreg-1,toplabel+1); inloop = 1; }
+	PAR_OPEN Num TO Num PAR_CLOSE { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"L%d:\tbeq\t$t%d,$t%d,L%d\n",toplabel,topreg-2,topreg-1,toplabel+1); 
+					appendText(s); inloop = 1; loopreg = topreg - 2; }
 ;
 Identifying :
 	IDENTIFIER { int index = findIdIndex($1);
 					if(index != -1) {
 						if(isFixed[index] == 0 ) {
-							printText();
+							isData = 0;
 						}
-						else { fprintf(f,"! ERROR : can't assign to fixed value poi~\n"); exit(0); 
+						else { printf("! ERROR : can't assign to fixed value poi~\n"); exit(0); 
 						}
 					} $$ = $1; } 
 ;
 
 Num:
-    INT { if(!isData) fprintf(f,"\tli\t$t%d,%d\n",topreg++,$1); $$ = $1; }
-	| MINUS INT { if(!isData) fprintf(f,"\tli\t$t%d,%d\n",topreg++, - $2); $$ = - $2; }
-	| Num MULTIPLY Num { if(!isData) fprintf(f,"\tmult\t$t%d,$t%d\n\tmfhi\t$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 * $3; topreg--; }
-	| Num DIVIDE Num { if(!isData) fprintf(f,"\tdiv\t$t%d,$t%d\n\tmflo\t$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 / $3; topreg--; }
+    INT {  if(!isData) { char *s = (char*)calloc(20,sizeof(char)); sprintf(s,"\tli\t$t%d,%d\n",topreg++,$1); appendText(s); } 
+$$ = $1; }
+	| MINUS INT { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tli\t$t%d,%d\n",topreg++, - $2); appendText(s); } $$ = - $2; }
+	| Num MULTIPLY Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tmult\t$t%d,$t%d\n\tmfhi\t$t%d\n",topreg-2,topreg-1,topreg-2); 
+					appendText(s); } $$ = $1 * $3; topreg--; }
+	| Num DIVIDE Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tdiv\t$t%d,$t%d\n\tmflo\t$t%d\n",topreg-2,topreg-1,topreg-2); 
+					appendText(s); } $$ = $1 / $3; topreg--; }
 	| Num MOD Num { $$ = $1 % $3; }
-	| Num PLUS Num { if(!isData) fprintf(f,"\tadd\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 + $3; topreg--; }
-	| Num MINUS Num { if(!isData) fprintf(f,"\tsub\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); $$ = $1 - $3; topreg--; }
+	| Num PLUS Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tadd\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); 
+					appendText(s); } $$ = $1 + $3; topreg--; }
+	| Num MINUS Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tsub\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); 
+					appendText(s); }  $$ = $1 - $3; topreg--; }
     	| PAR_OPEN Num PAR_CLOSE { $$ = $2; }
-	| IDENTIFIER { int s = findIdIndex($1); $$ = (s  != -1) ? r[s] : 0; if(!isData) fprintf(f,"\tlw\t$t%d,%s\n",topreg++,iden[s]); }
+	| IDENTIFIER { int inde = findIdIndex($1); if(inde  != -1) $$ = r[inde]; else {
+						char *errormsg = (char*)calloc(30,sizeof(char));
+						sprintf(errormsg,"Variable undeclared : %s",$1);
+						yyerror(errormsg); 
+					}
+					if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+					sprintf(s,"\tlw\t$t%d,%s\n",topreg++,iden[inde]); appendText(s); } }
 ;
 
 Error:
-	ERROR {fprintf(f,"! ERROR\n");}
-	| Error ERROR {fprintf(f,"! ERROR\n");}
+	ERROR {printf("! ERROR\n");}
+	| Error ERROR {printf("! ERROR\n");}
 
 %%
 
 int yyerror(char *s) {
-    fprintf(f,"! ERROR\n");
+    	printf("! ERROR %s\n",s);
+	node* runner = h;
+	while(runner){
+		node* prerun = runner;
+		runner = runner->next;
+		free(prerun);
+	}
+	exit(0);
 }
 
 int main() {
 	f = fopen("temp.s","w");
-	fprintf(f,".data");
 	yyparse();
+	printAll();
+	fclose(f);
 }
 printText()
 {
-	if(isData) {
-		isData = 0;
-		fprintf(f,".text\nmain:");
-	}
+	isDataOnWrite = 0;
+	printf("\n.text\nmain:\n");
 }
 int findIdIndex(char* id)
 {
@@ -151,16 +216,90 @@ int findIdIndex(char* id)
 	}
 	return -1;
 }
-printStr(char* s)
+char* replaceStr(char* s)
 {
-	while(*(++s) != '\"')
-		if(*s != '\\') fprintf(f,"%c",*s);
+	char* newStr = (char*) calloc(40,sizeof(char));
+	char* runner = newStr;
+	while(*(++s) != '\"') {
+		if(*s != '\\') *runner = *s;
 		else switch(*(++s))
 		{
-			case('\\') : fprintf(f,"\\"); break;
-			case('n') : fprintf(f,"\n"); break;
-			case('t') : fprintf(f,"\t"); break;
-			case('r') : fprintf(f,"\r"); break;
+			case('\\') : *runner = '\\'; break;
+			case('n') : *runner = '\n'; break;
+			case('t') : *runner = '\t'; break;
+			case('r') : *runner = '\r'; break;
 		}
+		printf("%c %c\n",*s,*runner);
+		runner++;
+	}
+	return newStr;
+}
+char* replaceStr2(char* s)
+{
+	char* newStr = (char*) calloc(40,sizeof(char));
+	char* runner = newStr;
+	*runner = *s;
+	runner++;
+	while(*(++s) != '\"') {
+		if(*s != '\\') *runner = *s;
+		else switch(*(++s))
+		{
+			case('\\') : *runner = '\\'; break;
+			case('n') : *runner = '\n'; break;
+			case('t') : *runner = '\t'; break;
+			case('r') : *runner = '\r'; break;
+		}
+		runner++;
+	}
+	*runner = *s;
+	runner++;
+	return newStr;
+}
+node* getNode(char* s)
+{
+	node* n = (node*)malloc(sizeof(node));
+	n->data = s;
+	n->next = NULL;
+	return n;
+}
+appendData(char* s)
+{
+	node* n = getNode(s);
+	if(!tdata) {
+		n->next = h;
+		h = n;
+	}
+	else{
+		n->next = tdata->next;
+		tdata->next = n;
+	}
+	tdata = n;
+}
+appendText(char* s)
+{
+	node* n = getNode(s);
+	if(!h){
+		h = n;
+	}
+	else if(!ttext) {
+		tdata->next = n;
+	}
+	else{
+		ttext->next = n;
+	}
+	ttext = n;
+}
+printAll()
+{
+	node* runner = h;
+	printf(".data");
+	//printf("%s",runner->data);
+	while(runner){
+		if((!tdata && isDataOnWrite) || (tdata && isDataOnWrite && runner == tdata->next)) printText();
+		printf("%s",runner->data);
+		node* prerun = runner;
+		runner = runner->next;
+		free(prerun);
+	}
 }
 
