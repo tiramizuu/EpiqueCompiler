@@ -102,7 +102,7 @@ Expression:
     	| FIXED Identifying ASSIGN Num {
 						r[topStack] = $4; 
 						isFixed[topStack] = 1; 
-						iden[topStack++] = $2;
+						iden[topStack] = $2;
 						char *s = (char*)calloc(30,sizeof(char)); 
 						sprintf(s,"\t%s:\t.word\t%d\n",iden[topStack++],$4); appendData(s);
 					}
@@ -113,7 +113,7 @@ Expression:
 						iden[topStack] = $1;
 						char *s = (char*)calloc(30,sizeof(char)); 
 						sprintf(s,"\t%s:\t.word\t%d\n",iden[topStack++],$3); appendData(s);
-						if(incheck || inloop) yyerror("can't assign to fixed variable more than once.");
+						if(incheck || inloop) yyerror("can't assign to fixed variable more than once poi~.");
 					}
 					else {
 						r[index] = $3;
@@ -154,7 +154,7 @@ Identifying :
 Num:
     INT {  if(!isData) { char *s = (char*)calloc(20,sizeof(char)); sprintf(s,"\tli\t$t%d,%d\n",topreg++,$1); appendText(s); } 
 $$ = $1; }
-	| MINUS INT { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
+	| MINUS Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
 					sprintf(s,"\tli\t$t%d,%d\n",topreg++, - $2); appendText(s); } $$ = - $2; }
 	| Num MULTIPLY Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
 					sprintf(s,"\tmult\t$t%d,$t%d\n\tmfhi\t$t%d\n",topreg-2,topreg-1,topreg-2); 
@@ -162,7 +162,9 @@ $$ = $1; }
 	| Num DIVIDE Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
 					sprintf(s,"\tdiv\t$t%d,$t%d\n\tmflo\t$t%d\n",topreg-2,topreg-1,topreg-2); 
 					appendText(s); } $$ = $1 / $3; topreg--; }
-	| Num MOD Num { $$ = $1 % $3; }
+	| Num MOD Num { if(!isData) { char *s = (char*)calloc(40,sizeof(char)); 
+					sprintf(s,"L%d\tblt\t$t%d,$t%d,L%d\n\tsub\t$t%d,$t%d\nL%d",toplabel,topreg-2,topreg-1,toplabel+1,topreg-2,topreg-1,topreg-2,toplabel+1); 
+					toplabel++; appendText(s); } $$ = $1 % $3; topreg--; }
 	| Num PLUS Num { if(!isData) { char *s = (char*)calloc(20,sizeof(char)); 
 					sprintf(s,"\tadd\t$t%d,$t%d,$t%d\n",topreg-2,topreg-1,topreg-2); 
 					appendText(s); } $$ = $1 + $3; topreg--; }
@@ -205,7 +207,7 @@ int main() {
 printText()
 {
 	isDataOnWrite = 0;
-	printf("\n.text\nmain:\n");
+	fprintf(f,"\n.TEXT\nmain:\n");
 }
 int findIdIndex(char* id)
 {
@@ -292,11 +294,11 @@ appendText(char* s)
 printAll()
 {
 	node* runner = h;
-	printf(".data");
+	if(tdata) fprintf(f,".DATA");
 	//printf("%s",runner->data);
 	while(runner){
 		if((!tdata && isDataOnWrite) || (tdata && isDataOnWrite && runner == tdata->next)) printText();
-		printf("%s",runner->data);
+		fprintf(f,"%s",runner->data);
 		node* prerun = runner;
 		runner = runner->next;
 		free(prerun);
